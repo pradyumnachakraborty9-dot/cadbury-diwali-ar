@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#2a0f4a" />
+<title>Cadbury Celebrations · Diwali AR Gift</title>
+
+<!-- A-Frame + MindAR (image tracking) via CDN: no build step needed -->
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+<style>
+  :root {
+    --purple: #4b1e78;
+    --purple-deep: #2a0f4a;
+    --gold: #f6c453;
+    --gold-deep: #c98a1b;
+    --glass: rgba(255, 255, 255, 0.16);
+    --glass-border: rgba(255, 255, 255, 0.35);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-top: env(safe-area-inset-top, 0px);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; height: 100%; overflow: hidden;
+    background: #000;
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", sans-serif;
+    overscroll-behavior: none;
+    touch-action: manipulation;
+  }
+  a-scene { position: fixed; inset: 0; }
+
+  /* ---------- Loading screen ---------- */
+  #loader {
+    position: fixed; inset: 0; z-index: 50;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+    background: radial-gradient(circle at 50% 35%, #6a2cb0 0%, var(--purple-deep) 70%);
+    color: #fff; text-align: center; padding: 24px;
+    transition: opacity .5s ease;
+  }
+  #loader.hide { opacity: 0; pointer-events: none; }
+  .diya-spinner {
+    width: 64px; height: 64px; border-radius: 50%;
+    border: 4px solid rgba(246,196,83,.25); border-top-color: var(--gold);
+    animation: spin 1s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loader h1 { margin: 0; font-size: 1.35rem; letter-spacing: .5px; color: var(--gold); }
+  #loader p { margin: 0; font-size: .95rem; opacity: .85; max-width: 300px; line-height: 1.4; }
+
+  /* ---------- Top status / hint ---------- */
+  #topbar {
+    position: fixed; left: 0; right: 0; top: calc(10px + var(--safe-top)); z-index: 20;
+    display: flex; justify-content: center; pointer-events: none; padding: 0 14px;
+  }
+  #hint {
+    pointer-events: none;
+    background: var(--glass); border: 1px solid var(--glass-border);
+    backdrop-filter: blur(14px) saturate(160%); -webkit-backdrop-filter: blur(14px) saturate(160%);
+    color: #fff; padding: 10px 16px; border-radius: 999px;
+    font-size: .88rem; font-weight: 500; text-align: center;
+    text-shadow: 0 1px 4px rgba(0,0,0,.45);
+    box-shadow: 0 6px 24px rgba(0,0,0,.25);
+    transition: opacity .3s ease, transform .3s ease;
+    max-width: 94vw;
+  }
+  #hint.hidden { opacity: 0; transform: translateY(-8px); }
+
+  /* ---------- Glassmorphism popup ---------- */
+  #popup-backdrop {
+    position: fixed; inset: 0; z-index: 30;
+    display: flex; align-items: center; justify-content: center; padding: 20px 20px calc(110px + var(--safe-bottom));
+    background: rgba(20, 5, 40, .35);
+    opacity: 0; pointer-events: none; transition: opacity .25s ease;
+  }
+  #popup-backdrop.show { opacity: 1; pointer-events: auto; }
+  #popup {
+    position: relative; width: min(92vw, 380px);
+    padding: 28px 22px 22px; text-align: center; color: #fff;
+    background: linear-gradient(145deg, rgba(255,255,255,.28), rgba(255,255,255,.08));
+    border: 1px solid rgba(255,255,255,.45);
+    border-radius: 26px;
+    backdrop-filter: blur(22px) saturate(180%); -webkit-backdrop-filter: blur(22px) saturate(180%);
+    box-shadow: 0 20px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.5);
+    transform: translateY(24px) scale(.94); transition: transform .35s cubic-bezier(.2,1.2,.4,1);
+  }
+  #popup-backdrop.show #popup { transform: translateY(0) scale(1); }
+  #popup .tag {
+    display: inline-block; font-size: .72rem; letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--gold); font-weight: 700; margin-bottom: 10px;
+  }
+  #popup .msg { font-size: 1.28rem; line-height: 1.45; font-weight: 600; text-shadow: 0 2px 8px rgba(0,0,0,.35); margin: 0 0 6px; }
+  #popup .sub { font-size: .9rem; opacity: .85; margin: 0 0 4px; }
+  #coupon-wrap { display: none; margin-top: 14px; }
+  #coupon-wrap.show { display: block; }
+  #coupon {
+    display: inline-block; padding: 12px 22px; border-radius: 14px;
+    border: 2px dashed var(--gold); color: var(--gold);
+    font-size: 1.7rem; font-weight: 800; letter-spacing: 4px;
+    background: rgba(0,0,0,.22);
+  }
+  .btn-row { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+  .pill {
+    appearance: none; border: 1px solid var(--glass-border); cursor: pointer;
+    min-height: 46px; padding: 0 20px; border-radius: 999px;
+    font: inherit; font-weight: 600; font-size: .95rem; color: #fff;
+    background: rgba(255,255,255,.18);
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    transition: transform .12s ease, background .2s ease;
+  }
+  .pill:active { transform: scale(.96); }
+  .pill.gold { background: linear-gradient(135deg, var(--gold), var(--gold-deep)); color: #3a1a00; border-color: transparent; }
+  #close-x {
+    position: absolute; top: 10px; right: 12px; width: 40px; height: 40px;
+    border-radius: 50%; border: 0; cursor: pointer; font-size: 1.3rem; color: #fff;
+    background: rgba(255,255,255,.18);
+  }
+
+  /* ---------- Bottom action bar ---------- */
+  #bottombar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    display: flex; gap: 10px; align-items: center; justify-content: center;
+    padding: 12px 14px calc(12px + var(--safe-bottom));
+    background: linear-gradient(to top, rgba(42,15,74,.92), rgba(42,15,74,.55) 70%, rgba(42,15,74,0));
+  }
+  #btn-share {
+    flex: 1 1 auto; max-width: 340px; min-height: 52px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    border: 0; border-radius: 16px; cursor: pointer;
+    font: inherit; font-weight: 700; font-size: 1rem; color: #fff;
+    background: linear-gradient(135deg, #25d366, #128c7e);
+    box-shadow: 0 8px 22px rgba(18,140,126,.45);
+    transition: transform .12s ease;
+  }
+  #btn-share:active { transform: scale(.97); }
+  #btn-share svg { width: 24px; height: 24px; fill: #fff; flex: none; }
+  .icon-btn {
+    flex: none; width: 52px; height: 52px; border-radius: 16px; cursor: pointer;
+    border: 1px solid var(--glass-border); color: #fff; font-size: 1.35rem;
+    background: var(--glass);
+    backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  }
+  .icon-btn:active { transform: scale(.94); }
+  .icon-btn.active { background: rgba(246,196,83,.35); border-color: var(--gold); }
+
+  @media (max-width: 360px) {
+    #popup .msg { font-size: 1.12rem; }
+    #btn-share { font-size: .92rem; }
+  }
+  @media (min-width: 768px) {
+    #popup .msg { font-size: 1.45rem; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation-duration: .01ms !important; }
+  }
+</style>
+</head>
+
+<body>
+
+<!-- Loading overlay -->
+<div id="loader">
+  <div class="diya-spinner"></div>
+  <h1>Cadbury Celebrations · Diwali</h1>
+  <p id="loader-msg">Lighting the diyas… Please allow camera access when asked.</p>
+</div>
+
+<!-- Top hint -->
+<div id="topbar"><div id="hint">Point your camera at the target image</div></div>
+
+<!-- Glass popup -->
+<div id="popup-backdrop" aria-hidden="true">
+  <div id="popup" role="dialog" aria-modal="true" aria-labelledby="popup-tag">
+    <button id="close-x" aria-label="Close">✕</button>
+    <span class="tag" id="popup-tag">Wish</span>
+    <p class="msg" id="popup-msg"></p>
+    <p class="sub" id="popup-sub"></p>
+    <div id="coupon-wrap">
+      <div id="coupon">DIWALI10</div>
+    </div>
+    <div class="btn-row">
+      <button class="pill gold" id="btn-copy" style="display:none">Copy code</button>
+      <button class="pill" id="btn-close">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bottom bar -->
+<div id="bottombar">
+  <button class="icon-btn" id="btn-free" title="Place gift in front of me" aria-label="Place gift in front of me">🎁</button>
+  <button id="btn-share" aria-label="Share on WhatsApp">
+    <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16.04 3C9.4 3 4 8.4 4 15.03c0 2.12.56 4.19 1.62 6.01L4 29l8.12-1.6a12 12 0 0 0 3.92.66h.01C22.67 28.06 28 22.66 28 16.03 28 9.4 22.67 3 16.04 3zm0 22.04h-.01a10 10 0 0 1-5.1-1.4l-.37-.22-4.82.95.99-4.7-.24-.38a9.95 9.95 0 0 1-1.52-5.26c0-5.5 4.5-9.97 10.04-9.97 5.53 0 10.03 4.47 10.03 9.97 0 5.5-4.5 9.01-8.99 11zm5.5-7.48c-.3-.15-1.79-.88-2.07-.98-.28-.1-.48-.15-.68.15-.2.3-.78.98-.96 1.18-.18.2-.35.22-.65.07-.3-.15-1.27-.47-2.42-1.5-.9-.8-1.5-1.78-1.67-2.08-.18-.3-.02-.46.13-.6.13-.14.3-.35.45-.52.15-.18.2-.3.3-.5.1-.2.05-.38-.02-.53-.08-.15-.68-1.64-.93-2.25-.25-.58-.5-.5-.68-.51h-.58c-.2 0-.53.08-.8.38-.28.3-1.06 1.03-1.06 2.5s1.08 2.9 1.23 3.1c.15.2 2.12 3.23 5.13 4.53.72.31 1.28.5 1.71.63.72.23 1.37.2 1.89.12.58-.09 1.79-.73 2.04-1.44.25-.7.25-1.3.18-1.43-.08-.12-.28-.2-.58-.35z"/></svg>
+    <span>Share on WhatsApp</span>
+  </button>
+  <button class="icon-btn" id="btn-reset" title="Reset" aria-label="Reset gift box">↺</button>
+</div>
+
+<!--
+  MindAR image tracking. imageTargetSrc below is MindAR's public demo target (.mind file).
+  To use your own pack/poster artwork: compile it at https://hiukim.github.io/mind-ar-js-doc/tools/compile
+  and replace the URL. Can't print the target? Tap the 🎁 button to place the gift in front of you instead.
+-->
+<a-scene
+  id="scene"
+  mindar-image="imageTargetSrc: https://cdn.jsdelivr.net/gh/hiukim/mind-ar-js@1.2.5/examples/image-tracking/assets/card-example/card.mind; maxTrack: 1; filterMinCF: 0.0001; filterBeta: 1000; uiScanning: no; uiLoading: no; uiError: no;"
+  color-space="sRGB"
+  renderer="colorManagement: true; physicallyCorrectLights: true; antialias: true; alpha: true"
+  embedded
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false"
+  loading-screen="enabled: false">
+
+  <!-- Camera + tap raycaster (rayOrigin: mouse also handles touch) -->
+  <a-camera id="cam" position="0 0 0" look-controls="enabled: false" wasd-controls="enabled: false"
+            cursor="fuse: false; rayOrigin: mouse"
+            raycaster="far: 10000; objects: .clickable">
+    <!-- Content used by "place in front of me" mode lives here -->
+    <a-entity id="free-anchor" position="0 -0.2 -3" scale="1.7 1.7 1.7" visible="false"></a-entity>
+  </a-camera>
+
+  <!-- Warm Diwali lighting: golden + purple -->
+  <a-light type="ambient" color="#ffcf70" intensity="0.85"></a-light>
+  <a-light type="directional" color="#ffd98a" intensity="1.1" position="1 2 2"></a-light>
+  <a-light type="point" color="#9a4dff" intensity="1.6" distance="6" position="-1.2 0.8 1.2"></a-light>
+  <a-light type="point" color="#ffb347" intensity="1.1" distance="6" position="1.2 -0.4 1.2"></a-light>
+
+  <!-- Image-tracked anchor -->
+  <a-entity id="target-anchor" mindar-image-target="targetIndex: 0"></a-entity>
+</a-scene>
+
+<script>
+/* =========================================================
+   Cadbury Celebrations · Diwali WebAR
+   ========================================================= */
+
+/* ---------- Config ---------- */
+const CONFIG = {
+  couponCode: 'DIWALI10',
+  shareText: 'Happy Diwali! 🪔✨ Open my virtual Cadbury Celebrations gift box and unlock a surprise wish + offer code: ',
+  messages: {
+    family: { tag: 'Family Wish', msg: 'To the family that makes every Diwali sweet! 🪔' },
+    neighbor: { tag: 'Neighbor Wish', msg: 'To the neighbors who feel like family—Happy Diwali! ✨' },
+    offer: { tag: 'Cadbury Offer', msg: 'Your festive treat is unlocked!', sub: 'Show this code at checkout:' }
+  }
+};
+
+/* ---------- Helpers ---------- */
+const $ = (id) => document.getElementById(id);
+
+function el(tag, attrs, parent) {
+  const e = document.createElement(tag);
+  if (attrs) for (const k in attrs) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+
+/* ---------- Components ---------- */
+
+/* Always faces the camera (works inside the tracked anchor) */
+AFRAME.registerComponent('billboard', {
+  init() { this.q1 = new THREE.Quaternion(); this.q2 = new THREE.Quaternion(); },
+  tick() {
+    const cam = this.el.sceneEl.camera;
+    if (!cam) return;
+    cam.getWorldQuaternion(this.q1);
+    const parent = this.el.object3D.parent;
+    if (parent) {
+      parent.getWorldQuaternion(this.q2);
+      this.q2.invert();
+      this.q1.premultiply(this.q2);
+    }
+    this.el.object3D.quaternion.copy(this.q1);
+  }
+});
+
+/* Candle-like flame flicker */
+AFRAME.registerComponent('flicker', {
+  schema: { base: { default: 1 }, amp: { default: 0.18 } },
+  init() { this.t = Math.random() * 10; },
+  tick(time, dt) {
+    this.t += dt * 0.012;
+    const f = this.data.base + Math.sin(this.t * 3.1) * this.data.amp + Math.sin(this.t * 7.3) * this.data.amp * 0.5;
+    this.el.object3D.scale.set(0.6 * f, 1.0 * (f + 0.1), 0.6 * f);
+  }
+});
+
+/* ---------- Scene builders ---------- */
+
+function buildMarigold(parent, x, y, z, s, hue) {
+  const g = el('a-entity', { position: `${x} ${y} ${z}`, scale: `${s} ${s} ${s}` }, parent);
+  const petalColor = hue || (Math.random() > 0.5 ? '#ff9f1a' : '#ffb300');
+  const n = 7;
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2;
+    el('a-sphere', {
+      radius: 0.035, 'segments-width': 8, 'segments-height': 6,
+      position: `${Math.cos(a) * 0.04} 0.012 ${Math.sin(a) * 0.04}`,
+      scale: '1 0.55 1', color: petalColor,
+      material: 'roughness: 0.8; emissive: #a85500; emissiveIntensity: 0.25'
+    }, g);
+  }
+  el('a-sphere', {
+    radius: 0.04, 'segments-width': 8, 'segments-height': 6,
+    position: '0 0.03 0', scale: '1 0.7 1', color: '#ff7a00',
+    material: 'roughness: 0.8; emissive: #a83a00; emissiveIntensity: 0.3'
+  }, g);
+  return g;
+}
+
+function buildDiya(parent, x, y, z, rotY) {
+  const g = el('a-entity', { position: `${x} ${y} ${z}`, rotation: `0 ${rotY || 0} 0` }, parent);
+  const brass = 'color: #c9922e; metalness: 0.65; roughness: 0.35; emissive: #5a3800; emissiveIntensity: 0.35';
+
+  // Bowl: bottom hemisphere, slightly flattened
+  el('a-sphere', {
+    radius: 0.075, 'theta-start': 90, 'theta-length': 90, 'segments-width': 18, 'segments-height': 10,
+    position: '0 0.045 0', scale: '1 0.7 1', material: brass + '; side: double'
+  }, g);
+  // Rim
+  el('a-torus', {
+    radius: 0.075, 'radius-tubular': 0.007, 'segments-radial': 8, 'segments-tubular': 20,
+    rotation: '90 0 0', position: '0 0.045 0', material: brass
+  }, g);
+  // Pointed spout
+  el('a-cone', {
+    'radius-bottom': 0.028, 'radius-top': 0.008, height: 0.07,
+    rotation: '0 0 -90', position: '0.085 0.05 0', material: brass
+  }, g);
+  // Foot
+  el('a-cylinder', { radius: 0.03, height: 0.012, position: '0 -0.005 0', material: brass, 'segments-radial': 14 }, g);
+  // Oil
+  el('a-circle', {
+    radius: 0.06, rotation: '-90 0 0', position: '0 0.05 0',
+    material: 'color: #5a2a00; roughness: 0.2; metalness: 0.2'
+  }, g);
+  // Wick
+  el('a-cylinder', { radius: 0.004, height: 0.025, position: '0.075 0.06 0', rotation: '0 0 -70', color: '#222' }, g);
+  // Flame
+  const flame = el('a-sphere', {
+    radius: 0.03, 'segments-width': 10, 'segments-height': 8,
+    position: '0.085 0.1 0', color: '#ffb300',
+    material: 'shader: flat; color: #ffcc33; opacity: 0.95; transparent: true',
+    flicker: 'base: 1; amp: 0.18'
+  }, g);
+  el('a-sphere', {
+    radius: 0.016, 'segments-width': 8, 'segments-height': 6,
+    position: '0 -0.005 0', material: 'shader: flat; color: #fff4c2'
+  }, flame);
+  el('a-light', { type: 'point', color: '#ffb347', intensity: 0.35, distance: 1.2, position: '0.085 0.14 0' }, g);
+  return g;
+}
+
+function buildGiftBox(parent) {
+  const box = el('a-entity', { id: 'giftbox', position: '0 0 0' }, parent);
+  const PURPLE = 'color: #5a2a96; roughness: 0.45; metalness: 0.1; emissive: #1d0640; emissiveIntensity: 0.3';
+  const GOLD = 'color: #f1bd45; roughness: 0.3; metalness: 0.7; emissive: #6a4300; emissiveIntensity: 0.4';
+
+  // Body
+  el('a-box', { width: 0.5, height: 0.34, depth: 0.5, position: '0 0 0', material: PURPLE }, box);
+  // Gold ribbon bands on body
+  el('a-box', { width: 0.07, height: 0.342, depth: 0.504, position: '0 0 0', material: GOLD }, box);
+  el('a-box', { width: 0.504, height: 0.342, depth: 0.07, position: '0 0 0', material: GOLD }, box);
+  // Gold trim at base
+  el('a-box', { width: 0.52, height: 0.018, depth: 0.52, position: '0 -0.16 0', material: GOLD }, box);
+  // Front label plate
+  const plate = el('a-entity', { position: '0 -0.02 0.256' }, box);
+  el('a-plane', { width: 0.3, height: 0.1, material: 'color: #fff5dc; roughness: 0.6' }, plate);
+  el('a-text', {
+    value: 'CADBURY\nCELEBRATIONS', align: 'center', color: '#4b1e78', width: 0.55,
+    position: '0 0 0.002', 'wrap-count': 14, 'line-height': 60, negate: 'false'
+  }, plate);
+
+  // Lid group (animated upward on tap)
+  const lid = el('a-entity', { id: 'lid', position: '0 0.22 0' }, box);
+  el('a-box', { width: 0.55, height: 0.1, depth: 0.55, position: '0 0 0', material: PURPLE }, lid);
+  el('a-box', { width: 0.075, height: 0.104, depth: 0.554, material: GOLD }, lid);
+  el('a-box', { width: 0.554, height: 0.104, depth: 0.075, material: GOLD }, lid);
+  // Bow
+  const bow = el('a-entity', { position: '0 0.08 0' }, lid);
+  el('a-torus', { radius: 0.06, 'radius-tubular': 0.016, rotation: '0 70 0', position: '-0.06 0.02 0', scale: '1 1.2 1', material: GOLD }, bow);
+  el('a-torus', { radius: 0.06, 'radius-tubular': 0.016, rotation: '0 -70 0', position: '0.06 0.02 0', scale: '1 1.2 1', material: GOLD }, bow);
+  el('a-sphere', { radius: 0.03, position: '0 0.01 0', material: GOLD }, bow);
+
+  // Inner glow (revealed when open)
+  const glow = el('a-sphere', {
+    id: 'inner-glow', radius: 0.2, position: '0 0.1 0', visible: 'false',
+    material: 'shader: flat; color: #ffd36b; opacity: 0.0; transparent: true'
+  }, box);
+
+  // Invisible, generous tap target
+  el('a-box', {
+    id: 'box-hit', class: 'clickable', width: 0.62, height: 0.62, depth: 0.62, position: '0 0.12 0',
+    material: 'opacity: 0; transparent: true; depthWrite: false'
+  }, box);
+
+  return { box, lid, glow };
+}
+
+function buildNode(parent, id, label, colorHex, x, y) {
+  // Outer = position/scale animation, inner = billboard
+  const node = el('a-entity', {
+    id: 'node-' + id, position: '0 0.2 0', scale: '0.001 0.001 0.001', visible: 'false'
+  }, parent);
+  node.dataset.x = x; node.dataset.y = y;
+
+  const face = el('a-entity', { billboard: '' }, node);
+  // Glowing orb
+  el('a-sphere', {
+    radius: 0.075, 'segments-width': 16, 'segments-height': 12, position: '0 0 0',
+    material: `color: ${colorHex}; emissive: ${colorHex}; emissiveIntensity: 0.65; roughness: 0.25; metalness: 0.3`
+  }, face);
+  el('a-torus', {
+    radius: 0.1, 'radius-tubular': 0.005, 'segments-tubular': 32,
+    material: 'shader: flat; color: #ffe08a; opacity: 0.85; transparent: true',
+    animation: 'property: rotation; to: 0 0 360; loop: true; dur: 5000; easing: linear'
+  }, face);
+  // Label pill
+  el('a-plane', {
+    width: 0.3, height: 0.075, position: '0 -0.16 0',
+    material: 'color: #1d0640; opacity: 0.72; transparent: true; shader: flat'
+  }, face);
+  el('a-text', {
+    value: label, align: 'center', color: '#ffe08a', width: 0.62, position: '0 -0.16 0.003'
+  }, face);
+  // Big invisible tap target (easier on touch screens)
+  const hit = el('a-sphere', {
+    class: 'clickable', 'data-node': id, radius: 0.19, position: '0 -0.05 0',
+    material: 'opacity: 0; transparent: true; depthWrite: false'
+  }, face);
+  return { node, hit };
+}
+
+/* ---------- App state ---------- */
+const state = {
+  mode: 'tracked',        // 'tracked' | 'free'
+  opened: false,
+  busy: false,
+  targetVisible: false,
+  content: null,          // { root, lid, nodes: [...] }
+  popupOpen: false
+};
+
+const scene = $('scene');
+const anchor = $('target-anchor');
+const freeAnchor = $('free-anchor');
+const hint = $('hint');
+
+function setHint(text) {
+  if (!text) { hint.classList.add('hidden'); return; }
+  hint.textContent = text;
+  hint.classList.remove('hidden');
+}
+
+function refreshRaycaster() {
+  const cam = $('cam');
+  if (cam.components && cam.components.raycaster) cam.components.raycaster.refreshObjects();
+}
+
+/* Build the whole Diwali scene inside a parent entity */
+function buildScene(parent) {
+  const root = el('a-entity', { id: 'diwali-root', position: '0 -0.05 0.22' }, parent);
+
+  // Floor glow disc
+  el('a-circle', {
+    radius: 0.85, rotation: '-90 0 0', position: '0 -0.178 0',
+    material: 'shader: flat; color: #7b34c9; opacity: 0.28; transparent: true'
+  }, root);
+  el('a-circle', {
+    radius: 0.55, rotation: '-90 0 0', position: '0 -0.177 0',
+    material: 'shader: flat; color: #ffc65a; opacity: 0.2; transparent: true'
+  }, root);
+
+  const { box, lid, glow } = buildGiftBox(root);
+  box.setAttribute('animation__bob', 'property: position; from: 0 0 0; to: 0 0.02 0; dir: alternate; loop: true; dur: 1800; easing: easeInOutSine');
+
+  const floor = el('a-entity', { position: '0 -0.178 0' }, root);
+
+  // Brass diyas ring
+  const diyaCount = 6;
+  for (let i = 0; i < diyaCount; i++) {
+    const a = (i / diyaCount) * Math.PI * 2 + Math.PI / 6;
+    const r = 0.58;
+    buildDiya(floor, Math.cos(a) * r, 0, Math.sin(a) * r, -(a * 180 / Math.PI) + 90);
+  }
+
+  // Marigold garland: inner ring around the box + outer loose petals between diyas
+  const inner = 18;
+  for (let i = 0; i < inner; i++) {
+    const a = (i / inner) * Math.PI * 2;
+    const r = 0.37;
+    buildMarigold(floor, Math.cos(a) * r, 0.02, Math.sin(a) * r, 1.05);
+  }
+  for (let i = 0; i < 6; i++) {
+    const a = (i / 6) * Math.PI * 2;
+    const r = 0.58;
+    buildMarigold(floor, Math.cos(a) * r, 0.02, Math.sin(a) * r, 1.2, i % 2 ? '#ffb300' : '#ff8c00');
+    buildMarigold(floor, Math.cos(a) * (r + 0.1), 0.02, Math.sin(a) * (r + 0.1), 0.8);
+  }
+
+  // Floating golden sparkles
+  for (let i = 0; i < 14; i++) {
+    const a = Math.random() * Math.PI * 2, r = 0.3 + Math.random() * 0.5;
+    const y = Math.random() * 0.8;
+    const sp = el('a-sphere', {
+      radius: 0.008 + Math.random() * 0.008, 'segments-width': 6, 'segments-height': 4,
+      position: `${Math.cos(a) * r} ${y} ${Math.sin(a) * r}`,
+      material: 'shader: flat; color: #ffe08a'
+    }, root);
+    sp.setAttribute('animation', `property: position; to: ${Math.cos(a) * r} ${y + 0.12} ${Math.sin(a) * r}; dir: alternate; loop: true; dur: ${1500 + Math.random() * 1500}; easing: easeInOutSine`);
+  }
+
+  // Floating interactive nodes (hidden until box opens)
+  const defs = [
+    { id: 'family',   label: 'Family Wish',   color: '#ff6fa8', x: -0.42, y: 0.78 },
+    { id: 'neighbor', label: 'Neighbor Wish', color: '#7fd1ff', x: 0.42,  y: 0.78 },
+    { id: 'offer',    label: 'Cadbury Offer', color: '#ffc83d', x: 0.0,   y: 1.05 }
+  ];
+  const nodes = defs.map(d => {
+    const n = buildNode(root, d.id, d.label, d.color, d.x, d.y);
+    n.def = d;
+    n.hit.addEventListener('click', (e) => { e.stopPropagation && e.stopPropagation(); onNodeTap(d.id); });
+    return n;
+  });
+
+  root.querySelector('#box-hit').addEventListener('click', onBoxTap);
+
+  return { root, box, lid, glow, nodes };
+}
+
+/* ---------- Interactions ---------- */
+
+function onBoxTap() {
+  if (state.busy || state.popupOpen) return;
+  if (state.opened) closeBox(); else openBox();
+}
+
+function openBox() {
+  const c = state.content; if (!c) return;
+  state.busy = true; state.opened = true;
+  setHint('Tap a glowing wish ✨');
+  vibrate(30);
+
+  // Lid lifts up and tilts a little
+  c.lid.setAttribute('animation__lift', 'property: position; to: 0 0.75 -0.05; dur: 900; easing: easeOutBack');
+  c.lid.setAttribute('animation__tilt', 'property: rotation; to: -14 0 8; dur: 900; easing: easeOutQuad');
+
+  // Inner glow
+  c.glow.setAttribute('visible', 'true');
+  c.glow.setAttribute('animation__glow', 'property: material.opacity; from: 0; to: 0.35; dur: 700; easing: easeOutQuad');
+
+  // Spawn nodes, staggered
+  c.nodes.forEach((n, i) => {
+    setTimeout(() => {
+      const { x, y } = n.def;
+      n.node.setAttribute('visible', 'true');
+      n.node.setAttribute('animation__spawn', `property: position; from: 0 0.2 0; to: ${x} ${y} 0.05; dur: 1000; easing: easeOutBack`);
+      n.node.setAttribute('animation__grow', 'property: scale; from: 0.001 0.001 0.001; to: 1 1 1; dur: 800; easing: easeOutBack');
+      setTimeout(() => {
+        n.node.removeAttribute('animation__spawn');
+        n.node.setAttribute('animation__float', `property: position; from: ${x} ${y} 0.05; to: ${x} ${y + 0.05} 0.05; dir: alternate; loop: true; dur: ${1300 + i * 250}; easing: easeInOutSine`);
+      }, 1050);
+    }, 350 + i * 220);
+  });
+
+  setTimeout(() => { state.busy = false; refreshRaycaster(); }, 1500);
+}
+
+function closeBox() {
+  const c = state.content; if (!c) return;
+  state.busy = true; state.opened = false;
+  setHint('Tap the gift box to open it');
+
+  c.nodes.forEach((n) => {
+    n.node.removeAttribute('animation__float');
+    n.node.removeAttribute('animation__spawn');
+    n.node.setAttribute('animation__shrink', 'property: scale; to: 0.001 0.001 0.001; dur: 450; easing: easeInQuad');
+    n.node.setAttribute('animation__back', 'property: position; to: 0 0.2 0; dur: 450; easing: easeInQuad');
+    setTimeout(() => {
+      n.node.setAttribute('visible', 'false');
+      n.node.removeAttribute('animation__shrink');
+      n.node.removeAttribute('animation__back');
+    }, 500);
+  });
+  c.lid.setAttribute('animation__lift', 'property: position; to: 0 0.22 0; dur: 600; easing: easeInOutQuad');
+  c.lid.setAttribute('animation__tilt', 'property: rotation; to: 0 0 0; dur: 600; easing: easeInOutQuad');
+  c.glow.setAttribute('animation__glow', 'property: material.opacity; to: 0; dur: 400');
+  setTimeout(() => { c.glow.setAttribute('visible', 'false'); state.busy = false; refreshRaycaster(); }, 650);
+}
+
+function onNodeTap(id) {
+  if (state.popupOpen || !state.opened) return;
+  vibrate(20);
+  const m = CONFIG.messages[id];
+  showPopup(m, id === 'offer');
+}
+
+/* ---------- Popup ---------- */
+function showPopup(m, isCoupon) {
+  $('popup-tag').textContent = m.tag;
+  $('popup-msg').textContent = m.msg;
+  $('popup-sub').textContent = m.sub || '';
+  $('popup-sub').style.display = m.sub ? 'block' : 'none';
+  $('coupon').textContent = CONFIG.couponCode;
+  $('coupon-wrap').classList.toggle('show', !!isCoupon);
+  $('btn-copy').style.display = isCoupon ? 'inline-block' : 'none';
+  $('btn-copy').textContent = 'Copy code';
+  $('popup-backdrop').classList.add('show');
+  $('popup-backdrop').setAttribute('aria-hidden', 'false');
+  state.popupOpen = true;
+}
+function hidePopup() {
+  $('popup-backdrop').classList.remove('show');
+  $('popup-backdrop').setAttribute('aria-hidden', 'true');
+  state.popupOpen = false;
+}
+$('close-x').addEventListener('click', hidePopup);
+$('btn-close').addEventListener('click', hidePopup);
+$('popup-backdrop').addEventListener('click', (e) => { if (e.target.id === 'popup-backdrop') hidePopup(); });
+
+$('btn-copy').addEventListener('click', async () => {
+  const code = CONFIG.couponCode;
+  try {
+    await navigator.clipboard.writeText(code);
+    $('btn-copy').textContent = 'Copied ✓';
+  } catch (_) {
+    // Fallback for older mobile browsers
+    const ta = document.createElement('textarea');
+    ta.value = code; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); $('btn-copy').textContent = 'Copied ✓'; } catch (__) {}
+    document.body.removeChild(ta);
+  }
+});
+
+/* ---------- WhatsApp share ---------- */
+$('btn-share').addEventListener('click', () => {
+  const url = window.location.href.split('#')[0];
+  const text = CONFIG.shareText + url;
+  const link = 'https://wa.me/?text=' + encodeURIComponent(text);
+  window.open(link, '_blank', 'noopener,noreferrer');
+});
+
+/* ---------- Mode switching / reset ---------- */
+function mountContent(parent) {
+  if (state.content) {
+    state.content.root.parentNode && state.content.root.parentNode.removeChild(state.content.root);
+    state.content = null;
+  }
+  state.opened = false; state.busy = false;
+  state.content = buildScene(parent);
+  setTimeout(refreshRaycaster, 300);
+}
+
+function setMode(mode) {
+  state.mode = mode;
+  hidePopup();
+  $('btn-free').classList.toggle('active', mode === 'free');
+  if (mode === 'free') {
+    anchor.setAttribute('visible', 'false');
+    freeAnchor.setAttribute('visible', 'true');
+    mountContent(freeAnchor);
+    setHint('Tap the gift box to open it');
+  } else {
+    freeAnchor.setAttribute('visible', 'false');
+    mountContent(anchor);
+    setHint(state.targetVisible ? 'Tap the gift box to open it' : 'Point your camera at the target image');
+  }
+}
+
+$('btn-free').addEventListener('click', () => setMode(state.mode === 'free' ? 'tracked' : 'free'));
+$('btn-reset').addEventListener('click', () => {
+  hidePopup();
+  mountContent(state.mode === 'free' ? freeAnchor : anchor);
+  setHint('Tap the gift box to open it');
+});
+
+/* ---------- Tracking + lifecycle events ---------- */
+anchor.addEventListener('targetFound', () => {
+  state.targetVisible = true;
+  if (state.mode === 'tracked') setHint(state.opened ? 'Tap a glowing wish ✨' : 'Tap the gift box to open it');
+});
+anchor.addEventListener('targetLost', () => {
+  state.targetVisible = false;
+  if (state.mode === 'tracked') setHint('Target lost — point the camera back at the image');
+});
+
+scene.addEventListener('arReady', () => {
+  $('loader').classList.add('hide');
+  setHint('Point your camera at the target image — or tap 🎁 to place the gift in front of you');
+  setTimeout(() => { if (!state.targetVisible && state.mode === 'tracked') setHint('No target? Tap 🎁 to place the gift in front of you'); }, 7000);
+});
+scene.addEventListener('arError', () => {
+  $('loader-msg').textContent = 'Camera could not start. Please allow camera access, use HTTPS, and reload.';
+  document.querySelector('.diya-spinner').style.display = 'none';
+});
+
+/* Build initial scene once A-Frame is ready */
+function init() { mountContent(anchor); }
+if (scene.hasLoaded) init(); else scene.addEventListener('loaded', init);
+
+/* ---------- Misc ---------- */
+function vibrate(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (_) {} }
+
+/* Prevent pinch/double-tap zoom interfering with taps on iOS */
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
+</script>
+</body>
+</html>
